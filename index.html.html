@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>業務サポート AIチャット＆キーワード検索（クラウド版）</title>
+  
+  <!-- Firebase SDK の読み込み (compat版) -->
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+
+  <style>
+    :root {
+      --bg-page: #F4F7FA;
+      --bg-card: #FFFFFF;
+      --border: #CBD5E1;
+      --text-main: #1E293B;
+      --text-sub: #475569;
+      --blue: #1D6FA5;
+      --blue-dark: #14537D;
+      --blue-soft: #EBF5FB;
+      --green: #1E8449;
+      --green-dark: #145A32;
+      --green-soft: #EAFAF1;
+      --amber-soft: #FEF3C7;
+      --amber-text: #92400E;
+      --red-soft: #FEE2E2;
+      --red-text: #991B1B;
+      --font-size: 16px;
+    }
+
+    body.font-large { --font-size: 20px; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: "BIZ UDPGothic", "Hiragino Kaku Gothic ProN", "Yu Gothic", "Meiryo", sans-serif;
+      background-color: var(--bg-page);
+      color: var(--text-main);
+      font-size: var(--font-size);
+      line-height: 1.65;
+      padding: 12px;
+    }
+    ruby rt { font-size: 0.6em; color: var(--text-sub); font-weight: 700; }
+    body.ruby-off ruby rt { display: none; }
+    button, input, textarea, select { font-family: inherit; font-size: inherit; }
+    button { cursor: pointer; }
+    .page-wrap { max-width: 820px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; }
+
+    .auth-card {
+      background: #E2E8F0; border: 2px solid var(--border); border-radius: 12px;
+      padding: 10px 16px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;
+    }
+    .header-card {
+      background: var(--bg-card); border: 2px solid var(--border); border-radius: 16px;
+      padding: 14px 16px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px;
+    }
+    .header-title { font-size: 1.25rem; font-weight: 700; color: var(--text-main); display: flex; align-items: center; gap: 8px; }
+    .header-sub { font-size: 0.84rem; color: var(--text-sub); margin-top: 2px; }
+    .a11y-bar { display: flex; flex-wrap: wrap; gap: 8px; }
+    .a11y-btn { padding: 8px 12px; border-radius: 10px; border: 2px solid var(--border); background: #F8FAFC; color: var(--text-main); font-size: 0.85rem; font-weight: 700; }
+    .a11y-btn.active { background: var(--blue); border-color: var(--blue); color: #FFFFFF; }
+
+    .section-card {
+      background: var(--bg-card); border: 2px solid var(--border); border-radius: 16px;
+      padding: 16px; display: flex; flex-direction: column; gap: 12px;
+    }
+    .section-title { font-size: 1.05rem; font-weight: 700; color: var(--text-main); display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 6px; }
+    .form-grid { display: flex; flex-wrap: wrap; gap: 8px; align-items: stretch; }
+    .input-field { flex: 1; min-width: 220px; min-height: 46px; padding: 10px 12px; border-radius: 10px; border: 2px solid #94A3B8; background: #F8FAFC; color: var(--text-main); }
+    .input-field:focus { outline: none; border-color: var(--blue); background: #FFFFFF; }
+    .select-field { min-height: 46px; padding: 8px 12px; border-radius: 10px; border: 2px solid #94A3B8; background: #FFFFFF; font-weight: 700; }
+    .btn-primary { min-height: 46px; padding: 10px 18px; border-radius: 10px; border: none; background: var(--blue); color: #FFFFFF; font-weight: 700; white-space: nowrap; }
+    .btn-primary:hover { background: var(--blue-dark); }
+    .btn-secondary { min-height: 44px; padding: 8px 14px; border-radius: 10px; border: 2px solid #94A3B8; background: #FFFFFF; color: var(--text-main); font-weight: 700; white-space: nowrap; }
+    .btn-secondary:hover { border-color: var(--blue); color: var(--blue); background: var(--blue-soft); }
+    .status-box { padding: 10px 14px; border-radius: 10px; font-size: 0.9rem; font-weight: 700; display: flex; align-items: center; gap: 8px; }
+    .status-box.warn { background: var(--amber-soft); color: var(--amber-text); border: 1.5px solid #FCD34D; }
+    .status-box.ok { background: var(--green-soft); color: var(--green-dark); border: 1.5px solid #6EE7B7; }
+    .status-box.err { background: var(--red-soft); color: var(--red-text); border: 1.5px solid #FCA5A5; }
+
+    .manual-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+    .manual-chip { display: inline-flex; align-items: center; gap: 6px; background: var(--blue-soft); border: 1.5px solid #93C5FD; border-radius: 10px; padding: 6px 10px; max-width: 100%; }
+    .manual-chip-btn { background: none; border: none; color: var(--blue-dark); font-weight: 700; font-size: 0.88rem; text-align: left; word-break: break-all; }
+    .manual-del { background: #FFFFFF; border: 1px solid #93C5FD; color: #64748B; border-radius: 6px; padding: 2px 7px; font-size: 0.8rem; font-weight: 700; }
+    .manual-del:hover { background: var(--red-soft); color: var(--red-text); border-color: #FCA5A5; }
+
+    .add-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+    .file-label-btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 44px; padding: 8px 16px; border-radius: 10px; border: 2px dashed var(--blue); background: var(--blue-soft); color: var(--blue-dark); font-weight: 700; cursor: pointer; }
+    .paste-box { background: #F8FAFC; border: 2px solid var(--border); border-radius: 12px; padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+    .hidden { display: none !important; }
+
+    .tab-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .tab-btn { min-height: 54px; padding: 10px 12px; border-radius: 14px; border: 2px solid var(--border); background: #FFFFFF; color: var(--text-sub); font-size: 1rem; font-weight: 700; display: flex; align-items: center; justify-content: center; gap: 8px; }
+    .tab-btn.active-chat { background: var(--blue); border-color: var(--blue); color: #FFFFFF; }
+    .tab-btn.active-search { background: var(--green); border-color: var(--green); color: #FFFFFF; }
+
+    .preset-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .preset-btn { min-height: 52px; padding: 10px 12px; border-radius: 12px; border: 2px solid #BAE6FD; background: #F8FAFC; color: var(--text-main); font-size: 0.88rem; font-weight: 700; text-align: left; }
+    .preset-btn.accent { background: #FFFBEB; border-color: #FCD34D; }
+
+    .chat-box { min-height: 220px; max-height: 560px; overflow-y: auto; background: #F8FAFC; border: 2px solid var(--border); border-radius: 14px; padding: 14px; display: flex; flex-direction: column; gap: 14px; }
+    .chat-empty { text-align: center; color: var(--text-sub); padding: 28px 12px; font-size: 0.92rem; }
+    .msg-row { display: flex; gap: 10px; align-items: flex-start; }
+    .msg-row.user { justify-content: flex-end; }
+    .msg-avatar { width: 38px; height: 38px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 0.95rem; flex-shrink: 0; }
+    .msg-avatar.user { background: #334155; color: #FFFFFF; }
+    .msg-avatar.ai { background: var(--blue); color: #FFFFFF; }
+    .msg-bubble { max-width: 86%; padding: 12px 16px; border-radius: 16px; word-break: break-word; }
+    .msg-bubble.user { background: var(--blue); color: #FFFFFF; border-bottom-right-radius: 4px; white-space: pre-wrap; }
+    .msg-bubble.ai { background: #FFFFFF; border: 2px solid var(--border); color: var(--text-main); border-bottom-left-radius: 4px; }
+    
+    .chat-input-area { display: flex; flex-direction: column; gap: 8px; }
+    .chat-textarea { width: 100%; min-height: 76px; padding: 12px; border-radius: 12px; border: 2px solid #94A3B8; background: #FFFFFF; resize: vertical; }
+    .chat-actions { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .admin-bar { background: var(--bg-card); border: 2px solid var(--border); border-radius: 14px; padding: 10px 14px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
+    .admin-badge { font-size: 0.85rem; font-weight: 700; color: var(--text-sub); display: flex; align-items: center; gap: 8px; }
+  </style>
+</head>
+<body class="ruby-off">
+  <div class="page-wrap">
+
+    <!-- ログイン管理バー -->
+    <div class="auth-card">
+      <div id="auth-status-text" style="font-size: 0.9rem; font-weight: 700;">
+        🔒 認証システムに接続中...
+      </div>
+      <div>
+        <button id="login-btn" type="button" class="btn-primary" style="min-height: 38px; padding: 6px 14px; font-size: 0.85rem;">
+          Googleアカウントでログイン
+        </button>
+        <button id="logout-btn" type="button" class="btn-secondary hidden" style="min-height: 38px; padding: 6px 14px; font-size: 0.85rem;">
+          ログアウト
+        </button>
+      </div>
+    </div>
+
+    <!-- ヘッダー -->
+    <header class="header-card">
+      <div>
+        <div class="header-title">💬 <ruby>業務<rt>ぎょうむ</rt></ruby>サポート（クラウド個人管理版）</div>
+        <div class="header-sub">就労継続支援A型事業所 マニュアル参照AI ＆ キーワード検索</div>
+      </div>
+      <div class="a11y-bar">
+        <button id="toggle-font-btn" type="button" class="a11y-btn">文字: ふつう</button>
+        <button id="toggle-ruby-btn" type="button" class="a11y-btn">ふりがな: OFF</button>
+      </div>
+    </header>
+
+    <!-- 管理者設定開閉バー -->
+    <div class="admin-bar">
+      <div class="admin-badge">
+        <span>🔒 管理者設定（APIキー・支援員Gmail・マニュアル）</span>
+        <span id="admin-summary-badge" style="color:var(--amber-text); background:var(--amber-soft); padding:2px 8px; border-radius:6px;">未設定</span>
+      </div>
+      <button id="toggle-admin-btn" type="button" class="btn-secondary" style="min-height:38px; padding:6px 12px; font-size:0.85rem;">
+        ⚙️ 管理者設定を開く
+      </button>
+    </div>
+
+    <!-- 管理者用パネル -->
+    <div id="admin-panel-wrap" class="hidden" style="display:flex; flex-direction:column; gap:14px;">
+      <section class="section-card">
+        <div class="section-title">
+          <span>🔑 1. APIキー・支援員Gmail設定</span>
+          <button id="close-admin-btn" type="button" class="btn-secondary" style="min-height:36px; padding:4px 10px; font-size:0.82rem;">閉じる 🔒</button>
+        </div>
+        <div class="form-grid">
+          <input id="api-key-input" type="password" class="input-field" placeholder="Gemini APIキー" />
+          <select id="model-select" class="select-field"><option value="auto">自動選択</option></select>
+          <button id="save-test-btn" type="button" class="btn-primary">保存して接続</button>
+          <button id="clear-key-btn" type="button" class="btn-secondary">クリア</button>
+        </div>
+        <div id="api-status-box" class="status-box warn">⚠️ APIキー未設定</div>
+        <div class="form-grid" style="margin-top:8px;">
+          <input id="staff-email-input" type="email" class="input-field" placeholder="支援員Gmail (例: shienin@example.com)" />
+          <button id="save-email-btn" type="button" class="btn-primary">Gmail保存</button>
+        </div>
+      </section>
+
+      <section class="section-card">
+        <div class="section-title">
+          <span>📁 2. マニュアル管理</span>
+          <span id="manual-count-text" style="color:var(--blue); font-weight:700;">0件</span>
+        </div>
+        <div id="manual-chips-area" class="manual-chips"></div>
+        <div class="add-actions">
+          <label class="file-label-btn" for="manual-file-input">
+            <span>📂 ファイルから追加（.docx / .txt 等）</span>
+            <input id="manual-file-input" type="file" multiple accept=".txt,.md,.csv,.json,.docx,.pdf,.xlsx" class="hidden" />
+          </label>
+          <button id="toggle-paste-btn" type="button" class="btn-secondary">＋ テキスト貼り付け</button>
+        </div>
+        <div id="inline-paste-box" class="paste-box hidden">
+          <input id="paste-name-input" type="text" class="input-field" placeholder="マニュアル名" />
+          <textarea id="paste-body-input" class="chat-textarea" rows="4" placeholder="本文を貼り付け"></textarea>
+          <button id="submit-paste-inline" type="button" class="btn-primary">登録</button>
+        </div>
+        <div id="manual-msg-box" class="status-box ok hidden"></div>
+      </section>
+    </div>
+
+    <!-- メイン作業タブ -->
+    <div class="tab-row">
+      <button id="tab-btn-chat" type="button" class="tab-btn active-chat">💬 AIに質問する</button>
+      <button id="tab-btn-search" type="button" class="tab-btn">🔍 ことばで探す</button>
+    </div>
+
+    <!-- チャットパネル -->
+    <section id="panel-chat" class="section-card">
+      <div id="chat-history-box" class="chat-box">
+        <div id="chat-empty-msg" class="chat-empty">ログインすると、クラウドに保存されたあなた専用のマニュアル・設定が読み込まれます。</div>
+      </div>
+      <form id="chat-submit-form" class="chat-input-area">
+        <textarea id="user-question-input" class="chat-textarea" placeholder="質問や物件情報を入力..."></textarea>
+        <div class="chat-actions">
+          <button id="clear-chat-btn" type="button" class="btn-secondary">リセット</button>
+          <button id="send-question-btn" type="submit" class="btn-primary">送信 ▶</button>
+        </div>
+      </form>
+    </section>
+
+    <!-- 検索パネル -->
+    <section id="panel-search" class="section-card hidden">
+      <div class="section-title"><span>🔍 ことばで探す</span></div>
+      <input id="search-kw-input" type="text" class="input-field" placeholder="キーワード検索" />
+      <div id="search-summary-text" style="font-weight:700; color:var(--green-dark);"></div>
+      <div id="search-hits-container" style="display:flex; flex-direction:column; gap:10px;"></div>
+    </section>
+
+  </div>
+
+  <script>
+    // ========= あなたのFirebase設定情報を反映済み =========
+    const firebaseConfig = {
+      apiKey: "AIzaSyAYxm_J_5UEnrguP7cGj7wu8xZalOWYgww",
+      authDomain: "gyomu-support-app-7bc25.firebaseapp.com",
+      projectId: "gyomu-support-app-7bc25",
+      storageBucket: "gyomu-support-app-7bc25.appspot.com",
+      messagingSenderId: "591172424231",
+      appId: "1:591172424231:web:ab2d3ac61027b5798c7402",
+      measurementId: "G-MFFH6H9W00"
+    };
+
+    firebase.initializeApp(firebaseConfig);
+    const auth = firebase.auth();
+    const db = firebase.firestore();
+
+    let currentUserUid = null;
+    let manuals = [];
+    let apiKey = "";
+    let staffEmail = "";
+
+    // DOM要素
+    const authStatusText = document.getElementById("auth-status-text");
+    const loginBtn = document.getElementById("login-btn");
+    const logoutBtn = document.getElementById("logout-btn");
+
+    // Googleログイン処理（file://環境でも動くようリダイレクト方式に変更）
+    loginBtn.addEventListener("click", () => {
+      const provider = new firebase.auth.GoogleAuthProvider();
+      auth.signInWithRedirect(provider).catch(err => alert("ログインエラー: " + err.message));
+    });
+
+    logoutBtn.addEventListener("click", () => {
+      auth.signOut();
+    });
+
+    // ページ読み込み時にリダイレクトログインの結果を処理
+    auth.getRedirectResult().catch(err => {
+      console.error("リダイレクトログインエラー:", err);
+    });
+
+    // 認証状態の監視
+    auth.onAuthStateChanged(user => {
+      if (user) {
+        currentUserUid = user.uid;
+        authStatusText.textContent = `🟢 ログイン中: ${user.displayName || user.email}`;
+        loginBtn.classList.add("hidden");
+        logoutBtn.classList.remove("hidden");
+        loadUserDataFromCloud(); // クラウドからデータ取得
+      } else {
+        currentUserUid = null;
+        authStatusText.textContent = "🔒 ログインしていません（「Googleアカウントでログイン」を押してください）";
+        loginBtn.classList.remove("hidden");
+        logoutBtn.classList.add("hidden");
+        manuals = [];
+        refreshManualUi();
+      }
+    });
+
+    // クラウド（Firestore）へのデータ保存
+    async function saveUserDataToCloud() {
+      if (!currentUserUid) return;
+      try {
+        await db.collection("users").doc(currentUserUid).set({
+          manuals, apiKey, staffEmail, updatedAt: new Date()
+        }, { merge: true });
+      } catch (e) {
+        console.error("保存エラー:", e);
+      }
+    }
+
+    // クラウドからのデータ読み込み
+    async function loadUserDataFromCloud() {
+      if (!currentUserUid) return;
+      try {
+        const doc = await db.collection("users").doc(currentUserUid).get();
+        if (doc.exists) {
+          const data = doc.data();
+          manuals = data.manuals || [];
+          apiKey = data.apiKey || "";
+          staffEmail = data.staffEmail || "";
+          document.getElementById("api-key-input").value = apiKey;
+          document.getElementById("staff-email-input").value = staffEmail;
+        } else {
+          // 初回ログイン時は初期マニュアルを入れる
+          manuals = [
+            { name: "基本マニュアル.txt", content: "就労継続支援A型事業所の基本マニュアルです。" }
+          ];
+          await saveUserDataToCloud();
+        }
+        refreshManualUi();
+      } catch (e) {
+        console.error("読み込みエラー:", e);
+      }
+    }
+
+    // 画面の更新（マニュアル一覧など）
+    function refreshManualUi() {
+      const countEl = document.getElementById("manual-count-text");
+      if (countEl) countEl.textContent = manuals.length + "件";
+      const chipsArea = document.getElementById("manual-chips-area");
+      if (!chipsArea) return;
+      chipsArea.innerHTML = "";
+      manuals.forEach((m, idx) => {
+        const chip = document.createElement("div");
+        chip.className = "manual-chip";
+        chip.innerHTML = `<span style="font-size:0.88rem; font-weight:700;">📄 ${m.name}</span>`;
+        const delBtn = document.createElement("button");
+        delBtn.className = "manual-del";
+        delBtn.textContent = "×";
+        delBtn.onclick = () => {
+          manuals.splice(idx, 1);
+          saveUserDataToCloud();
+          refreshManualUi();
+        };
+        chip.appendChild(delBtn);
+        chipsArea.appendChild(chip);
+      });
+    }
+
+    // その他の基本ボタン動作
+    document.getElementById("toggle-admin-btn").onclick = () => {
+      document.getElementById("admin-panel-wrap").classList.toggle("hidden");
+    };
+    document.getElementById("close-admin-btn").onclick = () => {
+      document.getElementById("admin-panel-wrap").classList.add("hidden");
+    };
+    document.getElementById("toggle-font-btn").onclick = () => {
+      const isL = document.body.classList.toggle("font-large");
+      document.getElementById("toggle-font-btn").textContent = isL ? "文字: おおきめ" : "文字: ふつう";
+    };
+    document.getElementById("toggle-ruby-btn").onclick = () => {
+      const isR = document.body.classList.toggle("ruby-off");
+      document.getElementById("toggle-ruby-btn").textContent = isR ? "ふりがな: OFF" : "ふりがな: ON";
+    };
+
+    // 保存ボタン類
+    document.getElementById("save-test-btn").onclick = () => {
+      apiKey = document.getElementById("api-key-input").value.trim();
+      saveUserDataToCloud();
+      alert("APIキーをクラウドに保存しました！");
+    };
+    document.getElementById("save-email-btn").onclick = () => {
+      staffEmail = document.getElementById("staff-email-input").value.trim();
+      saveUserDataToCloud();
+      alert("支援員Gmailをクラウドに保存しました！");
+    };
+
+    // 簡易テキスト追加
+    document.getElementById("toggle-paste-btn").onclick = () => {
+      document.getElementById("inline-paste-box").classList.toggle("hidden");
+    };
+    document.getElementById("submit-paste-inline").onclick = () => {
+      const name = document.getElementById("paste-name-input").value.trim() || "マニュアル.txt";
+      const body = document.getElementById("paste-body-input").value.trim();
+      if (!body) return alert("本文を入力してください");
+      manuals.push({ name, content: body });
+      saveUserDataToCloud();
+      refreshManualUi();
+      document.getElementById("inline-paste-box").classList.add("hidden");
+      document.getElementById("paste-name-input").value = "";
+      document.getElementById("paste-body-input").value = "";
+      alert("マニュアルを追加してクラウドに保存しました！");
+    };
+
+    // タブ切替
+    document.getElementById("tab-btn-chat").onclick = () => {
+      document.getElementById("panel-chat").classList.remove("hidden");
+      document.getElementById("panel-search").classList.add("hidden");
+    };
+    document.getElementById("tab-btn-search").onclick = () => {
+      document.getElementById("panel-search").classList.remove("hidden");
+      document.getElementById("panel-chat").classList.add("hidden");
+    };
+  </script>
+</body>
+</html>
